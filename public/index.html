@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <meta name="theme-color" content="#f6f4ec">
+  <title>英语积累笔记本 · Jam</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <a class="brand" href="/" aria-label="英语积累笔记本首页">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v18m3-13h4m-4 4h4"/>
+      </svg>
+      <span>JAM’S NOTEBOOK</span>
+    </a>
+    <button id="lock" class="quiet" type="button" hidden>锁定</button>
+  </header>
+  <main class="layout">
+    <section class="intro" aria-labelledby="page-title">
+      <div class="intro-copy">
+        <p class="eyebrow"><span></span> JAM 的私人笔记</p>
+        <h1 id="page-title">英语积累笔记本</h1>
+        <p class="subtitle">把阅读里遇见的好表达，留在这里。</p>
+      </div>
+      <span class="folio" aria-hidden="true">EN<span>.</span></span>
+    </section>
+    <section class="login panel" id="login" hidden>
+      <h2>打开笔记本</h2>
+      <form id="login-form">
+        <label for="token">访问令牌</label>
+        <div class="login-row">
+          <input id="token" type="password" autocomplete="current-password" required>
+          <button class="primary" type="submit">打开</button>
+        </div>
+        <p id="login-error" class="error" role="alert" hidden></p>
+      </form>
+    </section>
+    <section id="notebook" aria-label="笔记条目" hidden>
+      <div class="panel controls">
+        <label class="search">
+          <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4 4"/>
+          </svg>
+          <input id="search" type="search" aria-label="搜索笔记" placeholder="搜索表达、意思、场景、例句或原句" autocomplete="off">
+        </label>
+        <div class="filters">
+          <label class="select-label"><span>来源</span><select id="source" aria-label="来源"><option value="">全部来源</option></select></label>
+          <label class="select-label"><span>排序</span><select id="sort" aria-label="排序">
+            <option value="seen">出现次数</option>
+            <option value="newest">最新加入</option>
+            <option value="due">即将到期</option>
+          </select></label>
+          <label class="switch-label"><input id="hide-known" type="checkbox" checked><span class="switch" aria-hidden="true"></span>隐藏已认识</label>
+        </div>
+      </div>
+      <div class="list-header">
+        <p id="summary" role="status"></p>
+        <button id="reset" class="quiet" type="button" hidden>清除筛选</button>
+      </div>
+      <p id="list-error" class="panel error empty" role="alert" hidden></p>
+      <div id="entries"></div>
+      <p id="empty" class="panel empty" hidden>这里没有符合条件的条目。</p>
+      <button id="more" class="panel more" type="button" hidden></button>
+    </section>
+    <footer>JAM’S NOTEBOOK <span>·</span> 英语积累笔记本</footer>
+  </main>
+  <div id="notice" class="notice" hidden>
+    <span id="notice-text" role="status"></span>
+    <button id="undo" type="button" hidden>撤销</button>
+  </div>
+  <template id="entry-template">
+    <article class="panel entry">
+      <header class="entry-header">
+        <div class="entry-title">
+          <h2 lang="en"></h2>
+          <button class="speech" type="button">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M11 5 6 9H3v6h3l5 4V5Zm4 4a4 4 0 0 1 0 6m2-8a7 7 0 0 1 0 10"/>
+            </svg>美音
+          </button>
+        </div>
+        <span class="frequency" hidden></span>
+      </header>
+      <div class="scene"><span class="field-label">场景</span><p></p></div>
+      <dl class="notes">
+        <div class="field"><dt class="field-label">意思</dt><dd data-field="meaning_zh"></dd></div>
+        <div class="field"><dt class="field-label">用法</dt><dd data-field="usage_note"></dd></div>
+        <div class="field example"><dt class="field-label">例句</dt><dd data-field="example" lang="en"></dd></div>
+        <div class="field original"><dt class="field-label">原句</dt><dd data-field="original_sentence" lang="en"></dd></div>
+      </dl>
+      <footer class="entry-footer">
+        <div class="entry-source"><span class="source-codes"></span><div class="source-text"></div></div>
+        <button class="mark" type="button"></button>
+      </footer>
+    </article>
+  </template>
+</body>
+</html>

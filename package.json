@@ -1,0 +1,12 @@
+{
+  "name": "jam-english-notebook",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler d1 migrations apply DB --local && wrangler dev",
+    "deploy": "node scripts/deploy.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.152.0"
+  }
+}

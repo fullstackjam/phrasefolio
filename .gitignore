@@ -1,0 +1,6 @@
+node_modules/
+.wrangler/
+.dev.vars*
+.env*
+/notebook.csv
+/migrations/0002_seed.sql
