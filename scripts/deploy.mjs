@@ -21,7 +21,7 @@ if (migration !== 0) process.exit(migration);
 const token = process.env.NOTEBOOK_API_TOKEN;
 if (!token) process.exit(wrangler(['deploy']));
 
-const directory = mkdtempSync(join(tmpdir(), 'jam-notebook-secrets-'));
+const directory = mkdtempSync(join(tmpdir(), 'phrasefolio-secrets-'));
 try {
   const file = join(directory, 'secrets.json');
   writeFileSync(file, JSON.stringify({ NOTEBOOK_API_TOKEN: token }), { mode: 0o600 });
