@@ -18,7 +18,7 @@
     {
       "binding": "DB",
       "database_name": "phrasefolio",
-      "database_id": "4d471953-f6c6-422d-a16d-7afc846bf300"
+      "database_id": "57449379-e549-4d5f-ae36-07f0707c0a27"
     }
   ],
   "secrets": { "required": ["PHRASEFOLIO_API_TOKEN"] },
