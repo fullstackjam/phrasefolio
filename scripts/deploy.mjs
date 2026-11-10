@@ -18,13 +18,13 @@ function wrangler(args) {
 const migration = wrangler(['d1', 'migrations', 'apply', 'DB', '--remote']);
 if (migration !== 0) process.exit(migration);
 
-const token = process.env.NOTEBOOK_API_TOKEN;
+const token = process.env.PHRASEFOLIO_API_TOKEN;
 if (!token) process.exit(wrangler(['deploy']));
 
 const directory = mkdtempSync(join(tmpdir(), 'phrasefolio-secrets-'));
 try {
   const file = join(directory, 'secrets.json');
-  writeFileSync(file, JSON.stringify({ NOTEBOOK_API_TOKEN: token }), { mode: 0o600 });
+  writeFileSync(file, JSON.stringify({ PHRASEFOLIO_API_TOKEN: token }), { mode: 0o600 });
   process.exitCode = wrangler(['deploy', '--secrets-file', file]);
 } finally {
   rmSync(directory, { recursive: true, force: true });
