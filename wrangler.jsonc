@@ -1,13 +1,13 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "jam-english-notebook",
+  "name": "phrasefolio",
   "account_id": "3adb6783a9b30e9f7f2c36c3a3ba7bf9",
   "main": "src/worker.js",
   "compatibility_date": "2026-10-26",
   "workers_dev": true,
   "preview_urls": false,
   "routes": [
-    { "pattern": "notebook.fullstackjam.com", "custom_domain": true }
+    { "pattern": "phrasefolio.fullstackjam.com", "custom_domain": true }
   ],
   "assets": {
     "directory": "./public",
@@ -17,7 +17,7 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "jam-english-notebook",
+      "database_name": "phrasefolio",
       "database_id": "4d471953-f6c6-422d-a16d-7afc846bf300"
     }
   ],

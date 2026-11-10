@@ -2,7 +2,7 @@
 
 单栏阅读页、Cloudflare Worker API 和 D1。浏览器输入访问令牌后解锁，令牌只保留在当前标签页的会话存储。条目和认识状态保存在 D1，换设备重新解锁后会读到同一份笔记。静态资源目录是 `public/`，CSV 和 SQL 迁移均在该目录之外。
 
-[生产站点](https://notebook.fullstackjam.com)使用 Worker Secret `NOTEBOOK_API_TOKEN`。自定义域名由 `wrangler.jsonc` 的 Worker 路由管理。
+[生产站点](https://phrasefolio.fullstackjam.com)使用 Worker Secret `NOTEBOOK_API_TOKEN`。自定义域名由 `wrangler.jsonc` 的 Worker 路由管理，Worker 名称为 `phrasefolio`。
 
 ## 本地运行
 
@@ -21,13 +21,16 @@ npm run dev
 
 ## Cloudflare 部署
 
-首次部署前，在目标 Cloudflare 账号授权 Wrangler。若配置尚无真实 D1 ID，运行下列命令创建数据库，将输出的 `database_id` 填入 `wrangler.jsonc`，并核对 `account_id`。
+生产 Worker 名称为 `phrasefolio`，站点为 [phrasefolio.fullstackjam.com](https://phrasefolio.fullstackjam.com)。生产 D1 已经存在，库内有 422 条笔记。`wrangler.jsonc` 里的 `database_name` 是 `phrasefolio`，`database_id` 必须保持 `4d471953-f6c6-422d-a16d-7afc846bf300`。生产账号上禁止再次执行 `wrangler d1 create`，禁止新建数据库，也禁止把绑定改到其他或空的 `database_id`。配置中的名称只是标签；下次部署仍必须绑定这个已有库。
+
+下面的创建命令只给一个还没有该库的新 Cloudflare 账号使用。生产账号已经创建过，跳过 `wrangler d1 create`。新账号需要先授权 Wrangler，再创建名为 `phrasefolio` 的数据库，把输出的 `database_id` 填入 `wrangler.jsonc`，并核对 `account_id`。
 
 要向新的 D1 导入原始条目，请在部署前生成私人导入迁移。部署到已有生产库时，可直接沿用已导入的数据。上线后的数据改动通过 API 或新增迁移完成。
 
 ```bash
 npx wrangler login --use-keyring --scopes account:read user:read workers_scripts:write d1:write
-npx wrangler d1 create jam-english-notebook
+# 生产 D1 已存在（database_id 4d471953-f6c6-422d-a16d-7afc846bf300）。禁止在生产账号执行下一行。
+npx wrangler d1 create phrasefolio
 ```
 
 首次上线时，从密码管理器把生产访问令牌注入部署进程的 `NOTEBOOK_API_TOKEN`。推荐使用随机生成的 32 字节令牌。也可以在 zsh 中用隐藏输入临时提供令牌。
