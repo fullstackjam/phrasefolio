@@ -21,6 +21,6 @@
       "database_id": "4d471953-f6c6-422d-a16d-7afc846bf300"
     }
   ],
-  "secrets": { "required": ["NOTEBOOK_API_TOKEN"] },
+  "secrets": { "required": ["PHRASEFOLIO_API_TOKEN"] },
   "observability": { "enabled": true, "traces": { "enabled": true } }
 }

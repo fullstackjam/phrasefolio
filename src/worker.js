@@ -25,7 +25,7 @@ export default {
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
 
     try {
-      if (!await authenticate(request, env.NOTEBOOK_API_TOKEN)) {
+      if (!await authenticate(request, env.PHRASEFOLIO_API_TOKEN)) {
         return json({ error: '请输入有效的访问令牌' }, 401, {
           'WWW-Authenticate': 'Bearer realm="Jam notebook"',
         });

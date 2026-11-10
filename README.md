@@ -2,7 +2,7 @@
 
 单栏阅读页、Cloudflare Worker API 和 D1。浏览器输入访问令牌后解锁，令牌只保留在当前标签页的会话存储。条目和认识状态保存在 D1，换设备重新解锁后会读到同一份笔记。静态资源目录是 `public/`，CSV 和 SQL 迁移均在该目录之外。
 
-[生产站点](https://phrasefolio.fullstackjam.com)使用 Worker Secret `NOTEBOOK_API_TOKEN`。自定义域名由 `wrangler.jsonc` 的 Worker 路由管理，Worker 名称为 `phrasefolio`。
+[生产站点](https://phrasefolio.fullstackjam.com)使用 Worker Secret `PHRASEFOLIO_API_TOKEN`。自定义域名由 `wrangler.jsonc` 的 Worker 路由管理，Worker 名称为 `phrasefolio`。
 
 ## 本地运行
 
@@ -13,7 +13,7 @@ GitHub 仓库只保存代码和数据库结构。本地需要原始条目时，�
 ```bash
 npm ci
 umask 077
-printf 'NOTEBOOK_API_TOKEN=%s\n' "$(openssl rand -hex 32)" > .dev.vars
+printf 'PHRASEFOLIO_API_TOKEN=%s\n' "$(openssl rand -hex 32)" > .dev.vars
 npm run dev
 ```
 
@@ -33,16 +33,16 @@ npx wrangler login --use-keyring --scopes account:read user:read workers_scripts
 npx wrangler d1 create phrasefolio
 ```
 
-首次上线时，从密码管理器把生产访问令牌注入部署进程的 `NOTEBOOK_API_TOKEN`。推荐使用随机生成的 32 字节令牌。也可以在 zsh 中用隐藏输入临时提供令牌。
+首次上线时，从密码管理器把生产访问令牌注入部署进程的 `PHRASEFOLIO_API_TOKEN`。推荐使用随机生成的 32 字节令牌。也可以在 zsh 中用隐藏输入临时提供令牌。
 
 ```zsh
-read -rs "NOTEBOOK_API_TOKEN?Production notebook token: "
+read -rs "PHRASEFOLIO_API_TOKEN?Production notebook token: "
 echo
-NOTEBOOK_API_TOKEN="$NOTEBOOK_API_TOKEN" npm run deploy
-unset NOTEBOOK_API_TOKEN
+PHRASEFOLIO_API_TOKEN="$PHRASEFOLIO_API_TOKEN" npm run deploy
+unset PHRASEFOLIO_API_TOKEN
 ```
 
-`npm run deploy` 会应用远程 D1 迁移并发布 Worker，命令输出包含 HTTPS 地址。后续部署直接运行 `npm run deploy` 即可沿用已配置的 Worker Secret。需要轮换时运行 `npx wrangler secret put NOTEBOOK_API_TOKEN` 并按提示输入新值。每台设备用同一个生产访问令牌解锁，API 调用也使用该值。 [Cloudflare Worker Secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
+`npm run deploy` 会应用远程 D1 迁移并发布 Worker，命令输出包含 HTTPS 地址。后续部署直接运行 `npm run deploy` 即可沿用已配置的 Worker Secret。需要轮换时运行 `npx wrangler secret put PHRASEFOLIO_API_TOKEN` 并按提示输入新值。每台设备用同一个生产访问令牌解锁，API 调用也使用该值。 [Cloudflare Worker Secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
 
 ## API
 
