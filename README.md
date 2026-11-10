@@ -21,7 +21,7 @@ npm run dev
 
 ## Cloudflare 部署
 
-生产 Worker 名称为 `phrasefolio`，站点为 [phrasefolio.fullstackjam.com](https://phrasefolio.fullstackjam.com)。生产 D1 已经存在，库内有 422 条笔记。`wrangler.jsonc` 里的 `database_name` 是 `phrasefolio`，`database_id` 必须保持 `4d471953-f6c6-422d-a16d-7afc846bf300`。生产账号上禁止再次执行 `wrangler d1 create`，禁止新建数据库，也禁止把绑定改到其他或空的 `database_id`。配置中的名称只是标签；下次部署仍必须绑定这个已有库。
+生产 Worker 名称为 `phrasefolio`，站点为 [phrasefolio.fullstackjam.com](https://phrasefolio.fullstackjam.com)。生产 D1 已经存在，库内有 422 条笔记。`wrangler.jsonc` 里的 `database_name` 是 `phrasefolio`，`database_id` 必须保持 `57449379-e549-4d5f-ae36-07f0707c0a27`。生产账号上禁止再次执行 `wrangler d1 create`，禁止新建数据库，也禁止把绑定改到其他或空的 `database_id`。配置中的名称只是标签；下次部署仍必须绑定这个已有库。
 
 下面的创建命令只给一个还没有该库的新 Cloudflare 账号使用。生产账号已经创建过，跳过 `wrangler d1 create`。新账号需要先授权 Wrangler，再创建名为 `phrasefolio` 的数据库，把输出的 `database_id` 填入 `wrangler.jsonc`，并核对 `account_id`。
 
@@ -29,7 +29,7 @@ npm run dev
 
 ```bash
 npx wrangler login --use-keyring --scopes account:read user:read workers_scripts:write d1:write
-# 生产 D1 已存在（database_id 4d471953-f6c6-422d-a16d-7afc846bf300）。禁止在生产账号执行下一行。
+# 生产 D1 已存在（database_id 57449379-e549-4d5f-ae36-07f0707c0a27）。禁止在生产账号执行下一行。
 npx wrangler d1 create phrasefolio
 ```
 
