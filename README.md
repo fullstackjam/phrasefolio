@@ -50,11 +50,11 @@ unset PHRASEFOLIO_API_TOKEN
 
 | 方法和路径 | 参数或请求体 |
 |---|---|
-| `GET /api/entries` | `q` 搜索表达、意思、场景、例句、原句。 `source` 为单个来源短码。 `known=true\|false`，省略时返回全部。 `sort=seen\|newest\|due`，默认 `seen`。 |
+| `GET /api/entries` | `q` 搜索表达、意思、场景、例句、原句。 `source_text` 按 `sources` 中的 `value` 匹配单个来源。 `source` 支持原有来源短码。 `known=true\|false`，省略时返回全部。 `sort=seen\|newest\|due`，默认 `seen`。 |
 | `POST /api/entries/:id/known` | `{"known":true}` 标为已认识。 `{"known":false}` 撤销并清空 `known_at`。响应是更新后的条目。 |
 | `POST /api/entries` | 创建或合并条目，响应是最终条目。 |
 
-列表响应为 `{"entries":[…],"total":422,"count":80}`。 `total` 是数据库总数，`count` 是筛选后的总数。条目包含原有字段、`known`、`known_at` 和派生的 `source_codes`。 `known_at` 为带 `+08:00` 偏移的 ISO 时间，未标记时为 `null`。
+列表响应包含 `entries`、`total`、`count` 和 `sources`。 `total` 是数据库总数，`count` 是筛选后的总数。 `sources` 包含全库去重后的非空来源，每项提供筛选值 `value` 和显示标题 `title`。条目包含原有字段、`known`、`known_at` 和派生的 `source_codes`。 `known_at` 为带 `+08:00` 偏移的 ISO 时间，未标记时为 `null`。
 
 新增条目 JSON 示例。
 

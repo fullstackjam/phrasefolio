@@ -1,4 +1,4 @@
-import { sourceOptions } from './sources.js';
+import { splitSources } from './sources.js';
 import { speakExpression } from './speech.js';
 
 const $ = (id) => document.getElementById(id);
@@ -20,10 +20,6 @@ let searchTimer;
 let noticeTimer;
 let undoEntry;
 let limit = PAGE_SIZE;
-
-for (const { code, title } of sourceOptions) {
-  source.add(new Option(code + ' · ' + title, code));
-}
 
 async function api(path, { data, signal } = {}) {
   const headers = { Authorization: 'Bearer ' + token };
@@ -52,6 +48,7 @@ function lock(message = '') {
   markRequests.clear();
   undoEntry = undefined;
   loaded = undefined;
+  source.options.length = 1;
   list.replaceChildren();
   $('notebook').hidden = true;
   $('lock').hidden = true;
@@ -66,10 +63,12 @@ function addLinks(element, text) {
   let cursor = 0;
   for (const match of text.matchAll(/https?:\/\/[^\s<>"“”]+/gu)) {
     const url = match[0].replace(/[),.;!?\]，。；！？]+$/u, '');
-    element.append(text.slice(cursor, match.index));
+    const prefix = text.slice(cursor, match.index);
+    const useTitle = cursor === 0 && match.index + url.length === text.length;
+    if (!useTitle) element.append(prefix);
     const link = document.createElement('a');
     link.href = url;
-    link.textContent = url;
+    link.textContent = useTitle ? prefix.trimEnd() || url : url;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     element.append(link);
@@ -95,15 +94,13 @@ function renderEntry(entry) {
     field.textContent = text;
     field.parentElement.hidden = !text;
   }
-  const codes = card.querySelector('.source-codes');
-  codes.hidden = entry.source_codes.length === 0;
-  for (const code of entry.source_codes) {
-    const badge = document.createElement('span');
-    badge.textContent = code;
-    badge.title = sourceOptions.find((source) => source.code === code).title;
-    codes.append(badge);
+  const sources = card.querySelector('.entry-source');
+  for (const text of splitSources(entry.source)) {
+    const item = document.createElement('li');
+    addLinks(item, text);
+    sources.append(item);
   }
-  addLinks(card.querySelector('.source-text'), entry.source);
+  sources.hidden = !sources.childElementCount;
   const mark = card.querySelector('.mark');
   mark.textContent = entry.known ? '✓ 已认识 · 撤销' : '已认识';
   mark.setAttribute('aria-pressed', String(entry.known));
@@ -132,13 +129,19 @@ async function refresh() {
   listRequest = controller;
   const params = new URLSearchParams({ sort: sort.value });
   if (search.value.trim()) params.set('q', search.value.trim());
-  if (source.value) params.set('source', source.value);
+  if (source.value) params.set('source_text', source.value);
   if (hideKnown.checked) params.set('known', 'false');
 
   try {
     const result = await api('/entries?' + params, { signal: controller.signal });
     if (controller.signal.aborted) return;
     loaded = result;
+    const selectedSource = source.value;
+    source.options.length = 1;
+    for (const { value, title } of result.sources) {
+      source.add(new Option(title, value));
+    }
+    source.value = result.sources.some(({ value }) => value === selectedSource) ? selectedSource : '';
     $('list-error').hidden = true;
     $('login').hidden = true;
     $('notebook').hidden = false;

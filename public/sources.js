@@ -16,8 +16,12 @@ const sources = [
 
 export const sourceOptions = sources.map(([code, title]) => ({ code, title }));
 
+export function splitSources(source) {
+  return source.split(' | ').map((part) => part.trim()).filter(Boolean);
+}
+
 export function sourceCodes(source) {
-  const parts = source.split(' | ');
+  const parts = splitSources(source);
   return sources
     .filter(([, , pattern]) => parts.some((part) => pattern.test(part)))
     .map(([code]) => code);

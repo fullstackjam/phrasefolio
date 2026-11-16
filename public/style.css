@@ -98,11 +98,9 @@ h1 { font-family: var(--serif); font-size: clamp(2rem, 5.8vw, 3.25rem); line-hei
 .example dd { font: 1.08rem/1.52 Georgia, serif; }
 .original dd { color: var(--muted); }
 .entry-footer { border-top: 1px solid var(--line); padding-top: 13px; display: flex; gap: 12px; justify-content: space-between; align-items: center; }
-.entry-source { min-width: 0; display: flex; gap: 6px 8px; align-items: baseline; flex-wrap: wrap; font-size: .75rem; line-height: 1.55; color: var(--muted); }
-.source-codes { display: inline-flex; gap: 4px; }
-.source-codes span { padding: 1px 5px; color: var(--green); background: var(--wash); border-radius: 4px; font-weight: 700; }
-.source-text { white-space: pre-wrap; overflow-wrap: anywhere; }
-.mark { padding: 7px 10px; min-height: 38px; font-size: .8rem; }
+.entry-source { min-width: 0; margin: 0; padding-inline-start: 1.15em; font-size: .75rem; line-height: 1.55; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.entry-source li + li { margin-top: 3px; }
+.mark { margin-inline-start: auto; padding: 7px 10px; min-height: 38px; font-size: .8rem; }
 .mark[aria-pressed="true"] { background: var(--wash); }
 .empty { padding: 24px; text-align: center; color: var(--muted); }
 .error { color: #9a3527; }
@@ -131,5 +129,4 @@ h1 { font-family: var(--serif); font-size: clamp(2rem, 5.8vw, 3.25rem); line-hei
   .scene, .notes { padding-inline: 8px; }
   .scene, .field { grid-template-columns: 2.75em minmax(0, 1fr); }
   .entry-footer { flex-wrap: wrap; }
-  .mark { margin-inline-start: auto; }
 }

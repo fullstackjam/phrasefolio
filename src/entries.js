@@ -1,4 +1,4 @@
-import { sourceCodes, sourceOptions } from '../public/sources.js';
+import { sourceCodes, sourceOptions, splitSources } from '../public/sources.js';
 
 const textFields = [
   'original_sentence', 'meaning_zh', 'usage_note', 'example', 'scene_zh',
@@ -71,6 +71,7 @@ const orders = {
 export async function listEntries(db, params) {
   const query = (params.get('q') ?? '').trim().toLowerCase();
   const source = (params.get('source') ?? '').trim().toUpperCase();
+  const sourceText = (params.get('source_text') ?? '').trim();
   const known = params.get('known');
   const sort = params.get('sort') ?? 'seen';
   if (!Object.hasOwn(orders, sort)) throw new RequestError(400, '排序方式无效');
@@ -82,12 +83,20 @@ export async function listEntries(db, params) {
   }
 
   const { results } = await db.prepare('SELECT * FROM entries ORDER BY ' + orders[sort]).all();
+  const sourceTexts = new Set(results.flatMap((entry) => splitSources(entry.source)));
+  const sources = [...sourceTexts].map((value) => {
+    const [code] = sourceCodes(value);
+    const preset = sourceOptions.find((option) => option.code === code);
+    const title = preset ? preset.code + ' · ' + preset.title : value.replace(/\s+https?:\/\/\S+$/i, '');
+    return { value, title };
+  }).sort((a, b) => a.title.localeCompare(b.title) || a.value.localeCompare(b.value));
   const entries = results.map(serialize).filter((entry) =>
     (known === null || entry.known === (known === 'true')) &&
     (!source || entry.source_codes.includes(source)) &&
+    (!sourceText || splitSources(entry.source).includes(sourceText)) &&
     (!query || searchFields.some((field) => entry[field].toLowerCase().includes(query)))
   );
-  return { entries, total: results.length, count: entries.length };
+  return { entries, total: results.length, count: entries.length, sources };
 }
 
 export async function setKnown(db, id, known) {
