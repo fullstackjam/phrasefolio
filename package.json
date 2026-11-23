@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "wrangler d1 migrations apply DB --local && wrangler dev",
     "test": "vitest run",
-    "deploy": "node scripts/deploy.mjs"
+    "deploy": "node scripts/deploy.mjs",
+    "upload-version": "node scripts/deploy.mjs upload-version"
   },
   "devDependencies": {
     "happy-dom": "^21.0.4",

@@ -24,11 +24,36 @@ function wrangler(args) {
 const executedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (executedDirectly) {
   const config = JSON.parse(readFileSync('wrangler.jsonc', 'utf8'));
+  const [command, option, ...extraArgs] = process.argv.slice(2);
+  const upload = command === 'upload-version';
+  if ((command && !upload) || (option && option !== '--dry-run') || extraArgs.length) {
+    console.error('用法：npm run deploy 或 npm run upload-version -- [--dry-run]');
+    process.exit(1);
+  }
+
+  if (upload) {
+    config.vars = {
+      ...config.vars,
+      ACCESS_AUD: process.env.ACCESS_AUD ?? config.vars?.ACCESS_AUD,
+      ACCESS_SERVICE_CLIENT_ID: process.env.ACCESS_SERVICE_CLIENT_ID ?? config.vars?.ACCESS_SERVICE_CLIENT_ID,
+    };
+  }
+
   const configError = deploymentConfigError(config);
   if (configError) {
     console.error(configError);
     process.exit(1);
   }
+  if (upload) {
+    const args = [
+      'versions', 'upload',
+      '--var', `ACCESS_AUD:${config.vars.ACCESS_AUD}`,
+      '--var', `ACCESS_SERVICE_CLIENT_ID:${config.vars.ACCESS_SERVICE_CLIENT_ID}`,
+    ];
+    if (option) args.push(option);
+    process.exit(wrangler(args));
+  }
+
   const migration = wrangler(['d1', 'migrations', 'apply', 'DB', '--remote']);
   if (migration !== 0) process.exit(migration);
   process.exit(wrangler(['deploy']));
