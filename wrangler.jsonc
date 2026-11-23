@@ -15,7 +15,6 @@
     "run_worker_first": true
   },
   "vars": {
-    "ACCESS_ENABLED": "false",
     "ACCESS_AUD": "",
     "ACCESS_SERVICE_CLIENT_ID": ""
   },
@@ -26,6 +25,5 @@
       "database_id": "57449379-e549-4d5f-ae36-07f0707c0a27"
     }
   ],
-  "secrets": { "required": ["PHRASEFOLIO_API_TOKEN"] },
   "observability": { "enabled": true, "traces": { "enabled": true } }
 }

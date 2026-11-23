@@ -56,15 +56,9 @@ h1 { font-family: var(--serif); font-size: clamp(2rem, 5.8vw, 3.25rem); line-hei
 .folio { position: absolute; right: 29px; bottom: -33px; z-index: -1; font: italic 10.75rem/1 Georgia, serif; color: #fbfbe71e; user-select: none; }
 .folio span { color: #e0ad6170; }
 .panel { background: var(--card); border: 1px solid var(--line); border-radius: 13px; }
-.controls, .login { margin-top: 22px; padding: 18px; }
-.login h2 { font: 700 1.45rem var(--serif); margin: 2px 0 19px; }
-.login form { max-width: 420px; }
-.login label { display: block; color: var(--muted); margin-bottom: 6px; font-size: .87rem; }
-.login-row { display: flex; gap: 9px; }
-.login input, .search { background: #f8f8f0; border: 1px solid var(--line); border-radius: 8px; }
-.login input { width: 100%; min-width: 0; padding: 9px 10px; }
-.primary { background: var(--green); color: white; border: 0; border-radius: 8px; padding: 9px 18px; white-space: nowrap; }
-.search { display: flex; align-items: center; gap: 9px; min-height: 48px; padding: 0 13px; color: var(--green); }
+.controls, .status { margin-top: 22px; padding: 18px; }
+.status h2 { font: 700 1.45rem var(--serif); margin: 2px 0 12px; }
+.search { display: flex; align-items: center; gap: 9px; min-height: 48px; padding: 0 13px; color: var(--green); background: #f8f8f0; border: 1px solid var(--line); border-radius: 8px; }
 .search:focus-within { outline: 2px solid #37694d; outline-offset: 2px; }
 .search svg { flex: none; }
 .search input { width: 100%; min-width: 0; border: 0; outline: none; background: transparent; color: var(--ink); padding: 9px 0; }
@@ -121,7 +115,7 @@ h1 { font-family: var(--serif); font-size: clamp(2rem, 5.8vw, 3.25rem); line-hei
   .layout { width: calc(100% - 26px); margin-top: 18px; }
   .intro { padding: 26px 19px; min-height: 170px; }
   .folio { right: 9px; bottom: -18px; font-size: 7.5rem; }
-  .controls, .login { margin-top: 13px; padding: 12px; }
+  .controls, .status { margin-top: 13px; padding: 12px; }
   .filters { gap: 7px 11px; }
   .select-label select { max-width: min(190px, 49vw); }
   .switch-label { margin-inline-start: 0; }

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ACCESS_ISSUER, ACCESS_JWKS_URL, CANONICAL_HOST } from '../src/access.js';
+import { deploymentConfigError } from '../scripts/deploy.mjs';
 
 const AUD = 'ab'.repeat(32);
 const OTHER_AUD = 'cd'.repeat(32);
@@ -58,10 +59,8 @@ function createEnv(overrides = {}) {
   const calls = [];
   return {
     calls,
-    ACCESS_ENABLED: 'true',
     ACCESS_AUD: AUD,
     ACCESS_SERVICE_CLIENT_ID: SERVICE_ID,
-    PHRASEFOLIO_API_TOKEN: BEARER,
     DB: {
       prepare(sql) {
         const statement = {
@@ -153,11 +152,15 @@ describe('repository config matches the live binding', () => {
     expect(config.workers_dev).toBe(true);
     expect(config.preview_urls).toBe(false);
     expect(config.vars).toEqual({
-      ACCESS_ENABLED: 'false',
       ACCESS_AUD: '',
       ACCESS_SERVICE_CLIENT_ID: '',
     });
-    expect(config.secrets.required).toEqual(['PHRASEFOLIO_API_TOKEN']);
+    expect(config.secrets).toBeUndefined();
+    expect(deploymentConfigError(config)).toMatch(/拒绝部署/);
+    expect(deploymentConfigError({
+      ...config,
+      vars: { ACCESS_AUD: AUD, ACCESS_SERVICE_CLIENT_ID: SERVICE_ID },
+    })).toBe('');
   });
 });
 
@@ -331,7 +334,7 @@ describe('human and machine scope', () => {
     expect((await marked.json()).expression).toBe('follow through');
   });
 
-  it('keeps collection on the machine identity', async () => {
+  it('keeps collection on the service JWT alone', async () => {
     const human = await send('/api/entries', {
       env,
       method: 'POST',
@@ -351,7 +354,6 @@ describe('human and machine scope', () => {
       method: 'POST',
       headers: {
         'Cf-Access-Jwt-Assertion': await serviceToken(),
-        Authorization: `Bearer ${BEARER}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ expression: 'follow through', scene_zh: '跟进工作中的迁移计划。' }),
@@ -367,9 +369,11 @@ describe('human and machine scope', () => {
   it.each([
     ['no credentials', {}],
     ['bearer only', { Authorization: `Bearer ${BEARER}` }],
-    ['service JWT only', { jwt: true }],
-    ['service JWT and wrong bearer', { jwt: true, Authorization: 'Bearer wrong' }],
-    ['different service client', { jwt: true, client: OTHER_SERVICE_ID, Authorization: `Bearer ${BEARER}` }],
+    ['service headers without a JWT', {
+      'CF-Access-Client-Id': SERVICE_ID,
+      'CF-Access-Client-Secret': 'not-a-real-secret',
+    }],
+    ['different service client', { jwt: true, client: OTHER_SERVICE_ID }],
   ])('rejects a machine request with %s', async (_label, options) => {
     const headers = { ...options };
     delete headers.jwt;
@@ -389,24 +393,24 @@ describe('human and machine scope', () => {
     expect(env.calls).toEqual([]);
   });
 
-  it('fails closed for machines when the service client id is not configured', async () => {
-    const headers = {
-      'Cf-Access-Jwt-Assertion': await serviceToken(),
-      Authorization: `Bearer ${BEARER}`,
-      'Content-Type': 'application/json',
-    };
+  it('fails closed when the service client id is not configured', async () => {
+    const envWithoutService = createEnv({ ACCESS_SERVICE_CLIENT_ID: '' });
     const machine = await send('/api/entries', {
-      env: createEnv({ ACCESS_SERVICE_CLIENT_ID: '' }),
+      env: envWithoutService,
       method: 'POST',
-      headers,
+      headers: {
+        'Cf-Access-Jwt-Assertion': await serviceToken(),
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({ expression: 'follow through' }),
     });
     expect(machine.status).toBe(503);
     const human = await send('/api/entries', {
-      env: createEnv({ ACCESS_SERVICE_CLIENT_ID: '' }),
+      env: envWithoutService,
       headers: { 'Cf-Access-Jwt-Assertion': await sign() },
     });
-    expect(human.status).toBe(200);
+    expect(human.status).toBe(503);
+    expect(envWithoutService.calls).toEqual([]);
   });
 
   it('keeps invalid collection input on the existing API', async () => {
@@ -415,7 +419,6 @@ describe('human and machine scope', () => {
       method: 'POST',
       headers: {
         'Cf-Access-Jwt-Assertion': await serviceToken(),
-        Authorization: `Bearer ${BEARER}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ expression: '   ' }),
@@ -426,33 +429,27 @@ describe('human and machine scope', () => {
 });
 
 describe('alternate origins and rollout', () => {
-  it('serves the current bearer API and assets before Access is enabled', async () => {
-    const env = createEnv({ ACCESS_ENABLED: 'false', ACCESS_AUD: AUD });
-    const asset = await send('/', { env, host: WORKERS_DEV });
-    expect(asset.status).toBe(200);
-    expect(await asset.text()).toBe('asset /');
-    const denied = await send('/api/entries', { env, host: CANONICAL_HOST });
-    expect(denied.status).toBe(401);
-    expect(denied.headers.get('WWW-Authenticate')).toBe('Bearer realm="Jam notebook"');
-    expect(await denied.json()).toEqual({ error: '请输入有效的访问令牌' });
-    const opened = await send('/api/entries?sort=seen', {
+  it('does not restore bearer authentication when ACCESS_ENABLED is false', async () => {
+    const env = createEnv({ ACCESS_ENABLED: 'false' });
+    const asset = await send('/', { env, host: WORKERS_DEV, headers: { Authorization: `Bearer ${BEARER}` } });
+    expect(asset.status).toBe(401);
+    expect(await asset.text()).not.toContain('asset');
+    expect(env.calls).toEqual([]);
+    const denied = await send('/api/entries', {
       env,
-      host: WORKERS_DEV,
       headers: { Authorization: `Bearer ${BEARER}` },
     });
-    expect(opened.status).toBe(200);
-    const session = await send('/api/session', { env });
-    expect(await session.json()).toEqual({ access: false });
-  });
-
-  it('does not treat values other than true as enabled', async () => {
-    const env = createEnv({ ACCESS_ENABLED: 'yes' });
-    const response = await send('/api/entries', {
+    expect(denied.status).toBe(401);
+    expect(denied.headers.get('WWW-Authenticate')).toBeNull();
+    expect(await denied.json()).toEqual({
+      error: '需要通过 Cloudflare Access 登录',
+      login: expect.stringContaining(`${ACCESS_ISSUER}/cdn-cgi/access/login/${CANONICAL_HOST}`),
+    });
+    const opened = await send('/api/entries?sort=seen', {
       env,
       headers: { 'Cf-Access-Jwt-Assertion': await sign() },
     });
-    expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({ error: '请输入有效的访问令牌' });
+    expect(opened.status).toBe(200);
   });
 
   it('blocks workers.dev, previews, and bearer-only requests after Access is enabled', async () => {

@@ -1,8 +1,8 @@
 # Jam 的英语积累笔记本
 
-单栏阅读页、Cloudflare Worker API 和 D1。默认仍由浏览器输入访问令牌后解锁，令牌只保留在当前标签页的会话存储。启用 Cloudflare Access 后，未登录的访问会转到 Cloudflare 登录页，浏览器不再询问访问令牌。条目和认识状态保存在 D1，换设备重新登录后会读到同一份笔记。静态资源目录是 `public/`，CSV 和 SQL 迁移均在该目录之外。
+单栏阅读页、Cloudflare Worker API 和 D1。未登录的访问会转到 Cloudflare Access 登录页。浏览器不保存访问令牌，也不再提供令牌表单。条目和认识状态保存在 D1，换设备重新登录后会读到同一份笔记。静态资源目录是 `public/`，CSV 和 SQL 迁移均在该目录之外。
 
-[生产站点](https://phrasefolio.fullstackjam.com)使用 Worker Secret `PHRASEFOLIO_API_TOKEN`。自定义域名由 `wrangler.jsonc` 的 Worker 路由管理，Worker 名称为 `phrasefolio`。
+[生产站点](https://phrasefolio.fullstackjam.com)由 Worker `phrasefolio` 提供，自定义域名写在 `wrangler.jsonc`。
 
 ## 本地运行
 
@@ -12,12 +12,11 @@ GitHub 仓库只保存代码和数据库结构。本地需要原始条目时，�
 
 ```bash
 npm ci
-umask 077
-printf 'PHRASEFOLIO_API_TOKEN=%s\n' "$(openssl rand -hex 32)" > .dev.vars
+npm test
 npm run dev
 ```
 
-打开 [本地预览](http://localhost:8787)，输入 `.dev.vars` 里的令牌。启动脚本会将项目中的迁移应用到本地 D1。没有导入迁移时，本地笔记本从空库启动。
+`npm test` 不需要生产凭据。本地预览没有 Cloudflare Access 在前面，页面会要求 Access 登录，不能再用访问令牌打开。启动脚本会将项目中的迁移应用到本地 D1。没有导入迁移时，本地笔记本从空库启动。
 
 ## Cloudflare 部署
 
@@ -33,55 +32,39 @@ npx wrangler login --use-keyring --scopes account:read user:read workers_scripts
 npx wrangler d1 create phrasefolio
 ```
 
-首次上线时，从密码管理器把生产访问令牌注入部署进程的 `PHRASEFOLIO_API_TOKEN`。推荐使用随机生成的 32 字节令牌。也可以在 zsh 中用隐藏输入临时提供令牌。
-
-```zsh
-read -rs "PHRASEFOLIO_API_TOKEN?Production notebook token: "
-echo
-PHRASEFOLIO_API_TOKEN="$PHRASEFOLIO_API_TOKEN" npm run deploy
-unset PHRASEFOLIO_API_TOKEN
-```
-
-`npm run deploy` 会应用远程 D1 迁移并发布 Worker，命令输出包含 HTTPS 地址。后续部署直接运行 `npm run deploy` 即可沿用已配置的 Worker Secret。需要轮换时运行 `npx wrangler secret put PHRASEFOLIO_API_TOKEN` 并按提示输入新值。Access 尚未启用时，每台设备用同一个生产访问令牌解锁，API 调用也使用该值。 [Cloudflare Worker Secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
+`npm run deploy` 会先检查 `ACCESS_AUD` 和 `ACCESS_SERVICE_CLIENT_ID`。两者缺一就会直接退出，不会改远程 D1，也不会发布 Worker。配置齐全后，它应用远程 D1 迁移并发布 Worker。不要把旧访问令牌注入这个命令。
 
 ## Cloudflare Access
 
-仓库里的 `ACCESS_ENABLED` 默认为 `false`。这个状态下行为与现在的线上一致：API 仍要求 `Authorization: Bearer`，静态页面仍可打开，浏览器仍显示访问令牌表单。不要在 Access 应用生效之前把 `ACCESS_ENABLED` 改成 `true`，否则 Worker 会拒绝所有没有有效 Access JWT 的请求，站点会锁住。这是关闭失败，不是临时放开。
+人和机器都只使用 Cloudflare Access JWT。代码里没有访问令牌表单，没有 `sessionStorage` 令牌，也没有 `ACCESS_ENABLED=false` 的旧认证路径。`Authorization: Bearer` 和 `CF-Access-Client-Id` 头本身都不能通过认证。
 
-JWT 只接受团队 `https://fullstackjam.cloudflareaccess.com` 的 RS256 签名，公钥只从 `https://fullstackjam.cloudflareaccess.com/cdn-cgi/access/certs` 读取。请求头、Cookie 和 Worker 变量都不能改签发方或 JWKS 地址。`Cf-Access-Authenticated-User-Email` 不作为身份。应用是否放行某人，由协调人创建的 Access 策略决定；Worker 再用应用 AUD 确认这枚 JWT 是发给 Phrasefolio 的。静态资源 Worker 拿不到 `ctx.access`，所以这里用 `jose` 自行校验 JWT。
+JWT 必须是团队 `https://fullstackjam.cloudflareaccess.com` 用 RS256 签的，公钥只从 `https://fullstackjam.cloudflareaccess.com/cdn-cgi/access/certs` 读取。请求头、Cookie 和 Worker 变量都不能改签发方或 JWKS 地址。校验 `iss`、`aud`、`exp`、存在时的 `nbf`，以及 `type=app`。`Cf-Access-Authenticated-User-Email` 不作为身份。静态资源 Worker 拿不到 `ctx.access`，所以这里用 `jose` 自行校验。
 
-启用后只有 `https://phrasefolio.fullstackjam.com` 会返回笔记或页面。`phrasefolio.mazhenting44.workers.dev` 和预览主机名即使带上原来的 Bearer，或带上一枚签名正确的 JWT，也返回 401。浏览器登录后不再发送 Bearer。收集接口 `POST /api/entries` 只接受机器身份：Access 服务令牌 JWT 的 `common_name` 必须等于 `ACCESS_SERVICE_CLIENT_ID`，并且请求仍带原来的 Bearer。人的 Access 身份可以读笔记和标记认识，不能调用收集接口。服务令牌不要改成从 `Authorization` 头读取，那个头继续给现有的 `PHRASEFOLIO_API_TOKEN` / 机器人的 `NOTEBOOK_API_TOKEN`。
+只有 `https://phrasefolio.fullstackjam.com` 会返回笔记或页面。`phrasefolio.mazhenting44.workers.dev` 和预览主机名一律 401。人的 JWT 可以读笔记和标记认识。`POST /api/entries` 只接受服务令牌 JWT：`common_name` 必须等于 `ACCESS_SERVICE_CLIENT_ID`，`sub` 为空，且没有邮箱。收集机器向该主机名发送 `CF-Access-Client-Id` 和 `CF-Access-Client-Secret`，由 Access 换成短时 JWT；Worker 不读取 Client Secret，也不再要求旧 Bearer。
 
-非秘密配置写在 `wrangler.jsonc` 的 `vars`。`npm run deploy` 会用文件里的值覆盖线上同名变量，所以启用和回滚都以提交里的这三个值为准，不要只在控制台里改：
+非秘密配置：
 
-| 变量 | 启用前 | 启用后 |
-|---|---|---|
-| `ACCESS_ENABLED` | `false` | `true` |
-| `ACCESS_AUD` | 空 | 应用的 Application Audience (AUD)，64 个十六进制字符 |
-| `ACCESS_SERVICE_CLIENT_ID` | 空 | 服务令牌的 Client ID，形如 `<32 个十六进制字符>.access` |
+| 变量 | 含义 |
+|---|---|
+| `ACCESS_AUD` | 应用的 Application Audience，64 个十六进制字符 |
+| `ACCESS_SERVICE_CLIENT_ID` | 专用服务令牌的 Client ID，形如 `<32 个十六进制字符>.access` |
 
-`PHRASEFOLIO_API_TOKEN` 继续只作为 Worker Secret。不要把它写进变量、仓库、浏览器脚本或响应。
+人的 Allow 策略已经存在且尚未挂到应用：`a61aaba5-dfc9-4521-9b5c-05a31efed1fb`，决策 allow，包含一个邮箱，会话 `720h`。不要改成 Everyone，也不要动 Health 应用。
 
-### 启用顺序
+### 切到生产之前
 
-1. 合并并部署本变更，且三个变量保持默认。确认网站仍是令牌登录，D1 绑定仍是 `57449379-e549-4d5f-ae36-07f0707c0a27`。不要新建数据库。
-2. 协调人创建服务令牌，把 Client Secret 放进密码管理器。给收集机器增加 `CF_ACCESS_CLIENT_ID` 和 `CF_ACCESS_CLIENT_SECRET`，保留现有 `NOTEBOOK_API_TOKEN`。机器每次请求 `https://phrasefolio.fullstackjam.com` 时同时发送 `CF-Access-Client-Id`、`CF-Access-Client-Secret` 和 `Authorization: Bearer`。此时 Access 应用还不存在，多出来的头会被忽略，收集应照常成功。
-3. 在 Zero Trust 创建 **Self-hosted** Access 应用，公共主机名只填 `phrasefolio.fullstackjam.com`。不要使用 Protect all Workers，也不要把账户里的其他主机名加进这个应用。身份提供商用现有的一次性密码。人的策略用 Allow，并且只包含明确的邮箱；不要用 Everyone。机器另建一条 Service Auth 策略（API 里的 `non_identity`），Include 这一枚服务令牌。打开 Strict service token authentication。不要设置 `read_service_tokens_from_header`，尤其不要设成 `Authorization`。
-4. 把下面三处会话时长都设成 **One month**。只改应用会话不够：全局会话的文档默认值是 24 小时，过期后才会再次要求一次性密码。全局会话作用于整个 Zero Trust 团队，这个账户上的其他 Access 应用也会一起变长。应用会话和这条 Allow 策略的会话时长也设成 One month。用 API 时，`session_duration` 使用 `720h`；若接口拒绝，再改用控制台里的 One month，并记下实际接受的值。
-5. 用浏览器完成一次登录，确认令牌表单仍在，而且收集机器带着新头和原来的 Bearer 仍能写入。然后把 AUD 和 Client ID 写入 `vars`，把 `ACCESS_ENABLED` 设为 `true`，再部署这一份配置。
-6. 确认浏览器不再出现令牌表单，退出会打开 `/cdn-cgi/access/logout`，`workers.dev` 返回 401，收集机器仍然成功，人的身份调用 `POST /api/entries` 得到 403。
+当前线上仍是合并 #4 之前的旧 Worker，继续用旧 Bearer。这份代码还不能部署，因为 `vars` 仍是空的，部署脚本会拒绝。等专用服务令牌和 Access 应用都准备好后：
 
-### 回滚
+1. 创建只包含 `phrasefolio.fullstackjam.com` 的 Self-hosted 应用。挂上上面的 Allow 策略。另建一条 Service Auth 策略，只包含这枚服务令牌。打开 Strict service token authentication。不要设置 `read_service_tokens_from_header`。不要使用 Protect all Workers。
+2. 应用会话也设为 `720h`。人的策略已经是 `720h`。若仍要减少一次性密码，再把团队全局会话调到 One month；那会影响团队上的其他 Access 应用。
+3. 收集机器改为只发送两个 Access 头，目标是 `https://phrasefolio.fullstackjam.com`。确认 Access 已放行之后，再把 AUD 和 Client ID 写入 `wrangler.jsonc` 并运行 `npm run deploy`。
+4. 确认没有令牌表单，退出走到 `/cdn-cgi/access/logout`，`workers.dev` 为 401，服务身份可以收录，人的身份收录返回 403。然后由主流程删除 1Password 里的旧登录项，并可以删除不再使用的 Worker Secret。
 
-1. 先把 `ACCESS_ENABLED` 改回 `false` 并部署。Bearer 立即重新生效。Access 应用可以暂时留着，人需要先过 Access 再输入令牌，机器继续发送服务令牌头和 Bearer。
-2. 确认笔记和收集都恢复后，再按需要删除 Phrasefolio 的 Access 应用。不要在 `ACCESS_ENABLED=true` 时删除应用或清空 `ACCESS_AUD`，那样 Worker 会拒绝请求。
-3. 不需要改 D1、绑定或令牌 Secret。回滚不是删除数据。
-
-本地 `npm test` 不读取生产 Secret。本地预览保持 `ACCESS_ENABLED=false`，继续使用 `.dev.vars` 里的令牌。
+在第 3 步之前部署会让笔记和收录一起失败。回滚是继续保留当前线上的旧 Worker 版本，不是把某个开关拨回 Bearer。不要改 D1。
 
 ## API
 
-Access 未启用时，读写都需 `Authorization: Bearer <token>`。Access 启用后，浏览器只靠已校验的 Access JWT，不再发送 Bearer；`POST /api/entries` 仍要机器服务令牌 JWT 加上原来的 Bearer。写请求另需 `Content-Type: application/json`。所有响应均为 JSON，错误格式为 `{"error":"说明"}`。`GET /api/session` 只返回 `{ "access": true|false }` 以及启用后的 `principal` 和 `logout`，不返回笔记、邮箱或令牌。
+浏览器请求靠 Access 注入并经 Worker 校验的 JWT。收集请求靠 Access 为服务令牌签发的 JWT。写请求另需 `Content-Type: application/json`。所有响应均为 JSON，错误格式为 `{"error":"说明"}`。已登录时 `GET /api/session` 返回 `{ "access": true, "principal": "human"|"service", "logout": "..." }`，不返回笔记、邮箱或令牌。
 
 | 方法和路径 | 参数或请求体 |
 |---|---|
