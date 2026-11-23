@@ -34,7 +34,7 @@ npx wrangler d1 create phrasefolio
 
 `npm run deploy` 会先检查 `ACCESS_AUD` 和 `ACCESS_SERVICE_CLIENT_ID`。两者缺一就会直接退出，不会改远程 D1，也不会发布 Worker。配置齐全后，它应用远程 D1 迁移并发布 Worker。不要把旧访问令牌注入这个命令。
 
-在 GitHub Actions 的 **Phrasefolio Worker version** 中手动运行 `main`，可以测试并上传待发布版本。仓库 Actions Secret `CLOUDFLARE_API_TOKEN` 需要该 Cloudflare 账号的 Workers Scripts 写入权限。运行日志会显示 Worker Version ID。这个流程只上传版本，生产切流须在下列验收条件满足后单独执行。
+在 GitHub Actions 的 **Phrasefolio Worker version** 中手动运行 `main`，将 `version_id` 留空即可测试并上传待发布版本。仓库 Actions Secret `CLOUDFLARE_API_TOKEN` 需要该 Cloudflare 账号的 Workers Scripts 写入权限。运行日志会显示 Worker Version ID。下列验收条件满足后，再手动运行并填入该 ID，将生产流量切到该版本。
 
 ## Cloudflare Access
 
