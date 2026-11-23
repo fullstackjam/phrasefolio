@@ -74,8 +74,9 @@ describe('human app in Access mode', () => {
       expect(init.credentials).toBe('same-origin');
       return jsonResponse(entries);
     }, { token: 'leftover-bearer' });
-    expect(document.getElementById('login').hidden).toBe(true);
-    expect(document.getElementById('login-form').hidden).toBe(true);
+    expect(document.getElementById('login-form')).toBeNull();
+    expect(document.getElementById('token')).toBeNull();
+    expect(document.getElementById('status').hidden).toBe(true);
     expect(document.getElementById('notebook').hidden).toBe(false);
     expect(document.getElementById('entries').textContent).toContain('follow through');
     expect(document.getElementById('sort').value).toBe('seen');
@@ -90,7 +91,7 @@ describe('human app in Access mode', () => {
       return jsonResponse(entries);
     });
     expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull();
-    expect(document.getElementById('login').hidden).toBe(true);
+    expect(document.getElementById('login-form')).toBeNull();
     expect(document.getElementById('notebook').hidden).toBe(false);
     expect(second.assigned).toEqual([]);
   });
@@ -119,9 +120,9 @@ describe('human app in Access mode', () => {
       return jsonResponse({ error: '访问校验暂时不可用，请稍后重试' }, 503);
     }, { token: 'leftover-bearer' });
     expect(unavailable.assigned).toEqual([]);
-    expect(document.getElementById('login-form').hidden).toBe(true);
-    expect(document.getElementById('token').value).toBe('');
-    expect(document.getElementById('login-error').hidden).toBe(false);
+    expect(document.getElementById('login-form')).toBeNull();
+    expect(document.getElementById('status-error').hidden).toBe(false);
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull();
     expect(location.pathname).not.toBe('/cdn-cgi/access/logout');
 
     const offline = await boot(async (input) => {
@@ -129,52 +130,36 @@ describe('human app in Access mode', () => {
       throw new TypeError('Failed to fetch');
     }, { token: 'leftover-bearer' });
     expect(offline.assigned).toEqual([]);
-    expect(document.getElementById('login-form').hidden).toBe(true);
+    expect(document.getElementById('status').hidden).toBe(false);
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull();
     expect(location.pathname).not.toBe('/cdn-cgi/access/logout');
   });
 });
 
 describe('auth is not cleared by an outage', () => {
-  it('keeps a stored token when the session request fails before Access mode is known', async () => {
+  it('shows a retryable error when the session request fails and does not log out', async () => {
     const offline = await boot(async () => {
       throw new TypeError('Failed to fetch');
     }, { token: 'stored-token' });
-    expect(sessionStorage.getItem(TOKEN_KEY)).toBe('stored-token');
-    expect(document.getElementById('login-form').hidden).toBe(true);
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull();
+    expect(document.getElementById('status').hidden).toBe(false);
+    expect(document.getElementById('notebook').hidden).toBe(true);
     expect(offline.assigned).toEqual([]);
 
     const unavailable = await boot(async () => jsonResponse({ error: '访问校验暂时不可用，请稍后重试' }, 503), {
       token: 'stored-token',
     });
-    expect(sessionStorage.getItem(TOKEN_KEY)).toBe('stored-token');
-    expect(document.getElementById('login-form').hidden).toBe(true);
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull();
+    expect(document.getElementById('status-error').hidden).toBe(false);
     expect(unavailable.assigned).toEqual([]);
+    expect(unavailable.fetchMock.mock.calls.some(([, init]) => init.headers?.Authorization)).toBe(false);
   });
 
-  it('keeps the legacy token when the notebook cannot be read', async () => {
-    const loaded = await boot(async (input) => {
-      if (requestUrl(input).includes('/api/session')) return jsonResponse({ access: false });
-      return jsonResponse({ error: '笔记暂时不可用，请稍后重试' }, 503);
-    }, { token: 'stored-token' });
-    expect(sessionStorage.getItem(TOKEN_KEY)).toBe('stored-token');
-    expect(document.getElementById('login-form').hidden).toBe(true);
-    expect(loaded.assigned).toEqual([]);
-    const entriesCall = loaded.fetchMock.mock.calls.find(([input]) => requestUrl(input).includes('/api/entries'));
-    expect(entriesCall[1].headers.Authorization).toBe('Bearer stored-token');
-  });
-
-  it('still shows the token form when Access is off and no token is stored', async () => {
-    const loaded = await boot(async () => jsonResponse({ access: false }));
-    expect(document.getElementById('login').hidden).toBe(false);
-    expect(document.getElementById('login-form').hidden).toBe(false);
-    expect(document.getElementById('notebook').hidden).toBe(true);
-    expect(loaded.assigned).toEqual([]);
-  });
-
-  it('follows an Access login redirect without offering the token form', async () => {
+  it('follows an Access login redirect without offering a token form', async () => {
     const login = `${'https://fullstackjam.cloudflareaccess.com'}/cdn-cgi/access/login/phrasefolio.fullstackjam.com?kid=abc&redirect_url=%2F`;
     const loaded = await boot(async () => jsonResponse({ error: '需要通过 Cloudflare Access 登录', login }, 401));
     expect(loaded.assigned).toEqual([login]);
-    expect(document.getElementById('login-form').hidden).toBe(true);
+    expect(document.getElementById('login-form')).toBeNull();
+    expect(document.getElementById('token')).toBeNull();
   });
 });

@@ -8,14 +8,9 @@ const sort = $('sort');
 const hideKnown = $('hide-known');
 const list = $('entries');
 const template = $('entry-template');
-const loginForm = $('login-form');
-const loginInput = $('token');
 const PAGE_SIZE = 24;
-const TOKEN_KEY = 'jam-notebook-access';
 const ACCESS_ISSUER = 'https://fullstackjam.cloudflareaccess.com';
 const markRequests = new Map();
-let token = '';
-let accessMode = false;
 let logoutUrl = '';
 let loaded;
 let listRequest;
@@ -46,7 +41,6 @@ function navigate(value) {
 
 async function api(path, { data, signal } = {}) {
   const headers = { Accept: 'application/json' };
-  if (!accessMode && token) headers.Authorization = 'Bearer ' + token;
   if (data !== undefined) headers['Content-Type'] = 'application/json';
   const response = await fetch('/api' + path, {
     cache: 'no-store',
@@ -74,43 +68,19 @@ async function api(path, { data, signal } = {}) {
 }
 
 function showOutage(message) {
-  $('login').querySelector('h2').textContent = '暂时打不开';
-  loginForm.hidden = true;
   listRequest?.abort();
   $('notebook').hidden = true;
   $('lock').hidden = true;
   $('notice').hidden = true;
-  $('login').hidden = false;
-  $('login-error').textContent = message;
-  $('login-error').hidden = false;
-}
-
-function lock(message = '') {
-  token = '';
-  sessionStorage.removeItem(TOKEN_KEY);
-  listRequest?.abort();
-  clearTimeout(searchTimer);
-  clearTimeout(noticeTimer);
-  markRequests.clear();
-  undoEntry = undefined;
-  loaded = undefined;
-  while (source.options.length > 1) source.remove(1);
-  list.replaceChildren();
-  $('notebook').hidden = true;
-  $('lock').hidden = true;
-  $('notice').hidden = true;
-  $('login').querySelector('h2').textContent = '打开笔记本';
-  loginForm.hidden = false;
-  $('login').hidden = false;
-  $('login-error').textContent = message;
-  $('login-error').hidden = !message;
-  loginInput.focus();
+  $('status').hidden = false;
+  $('status-error').textContent = message;
+  $('status-error').hidden = false;
 }
 
 function leaveForAccess(error) {
   const target = allowedAccessUrl(error.login);
   if (target) navigate(target);
-  else if (error.redirected || accessMode) location.assign(location.href);
+  else if (error.redirected) location.assign(location.href);
 }
 
 function addLinks(element, text) {
@@ -177,7 +147,6 @@ function renderList() {
 }
 
 async function refresh() {
-  if (!accessMode && !token) return;
   listRequest?.abort();
   const controller = new AbortController();
   listRequest = controller;
@@ -197,16 +166,14 @@ async function refresh() {
     }
     source.value = result.sources.some(({ value }) => value === selectedSource) ? selectedSource : '';
     $('list-error').hidden = true;
-    $('login').hidden = true;
+    $('status').hidden = true;
     $('notebook').hidden = false;
     $('lock').hidden = false;
-    if (!accessMode) sessionStorage.setItem(TOKEN_KEY, token);
     renderList();
   } catch (error) {
     if (controller.signal.aborted) return;
     if (error.status === 401) {
-      if (accessMode || error.redirected) leaveForAccess(error);
-      else lock(error.message);
+      leaveForAccess(error);
       return;
     }
     if ($('notebook').hidden) {
@@ -247,10 +214,8 @@ async function changeKnown(entry, known) {
     notify(known ? '已标为认识' : '已撤销认识标记', known ? saved : undefined);
   } catch (error) {
     if (markRequests.get(entry.id) !== change) return;
-    if (error.status === 401) {
-      if (accessMode || error.redirected) leaveForAccess(error);
-      else lock(error.message);
-    } else notify('标记保存失败，请重试。');
+    if (error.status === 401) leaveForAccess(error);
+    else notify('标记保存失败，请重试。');
   } finally {
     if (markRequests.get(entry.id) === change) {
       markRequests.delete(entry.id);
@@ -286,35 +251,15 @@ $('more').addEventListener('click', () => {
   firstNew?.querySelector('.speech').focus();
 });
 $('lock').addEventListener('click', () => {
-  if (!accessMode) {
-    lock();
-    return;
-  }
   const target = allowedAccessUrl(logoutUrl) || new URL('/cdn-cgi/access/logout', location.origin).toString();
   location.assign(target);
 });
 $('undo').addEventListener('click', () => {
   if (undoEntry) changeKnown(undoEntry, false);
 });
-loginForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  if (accessMode) return;
-  token = loginInput.value.trim();
-  loginInput.value = '';
-  if (!token) return;
-  const button = loginForm.querySelector('button');
-  button.disabled = true;
-  $('login-error').hidden = true;
-  try {
-    await refresh();
-    if (!$('notebook').hidden) search.focus();
-  } finally {
-    button.disabled = false;
-  }
-});
 
 async function start() {
-  token = sessionStorage.getItem(TOKEN_KEY) ?? '';
+  sessionStorage.removeItem('jam-notebook-access');
   let response;
   try {
     response = await fetch('/api/session', {
@@ -333,32 +278,18 @@ async function start() {
   }
   const body = await response.json().catch(() => ({}));
   if (response.status === 401) {
-    sessionStorage.removeItem(TOKEN_KEY);
-    token = '';
-    loginForm.hidden = true;
     const target = allowedAccessUrl(body.login);
     if (target) navigate(target);
     else showOutage(typeof body.error === 'string' ? body.error : '需要通过 Cloudflare Access 登录');
     return;
   }
-  if (!response.ok) {
+  if (!response.ok || body.access !== true) {
     showOutage('笔记暂时不可用，请稍后重试。');
     return;
   }
-  if (body.access === true) {
-    accessMode = true;
-    logoutUrl = typeof body.logout === 'string' ? body.logout : '';
-    token = '';
-    sessionStorage.removeItem(TOKEN_KEY);
-    loginForm.hidden = true;
-    $('lock').textContent = '退出';
-    await refresh();
-    if (!$('notebook').hidden) search.focus();
-    return;
-  }
-  accessMode = false;
-  if (token) await refresh();
-  else lock();
+  logoutUrl = typeof body.logout === 'string' ? body.logout : '';
+  await refresh();
+  if (!$('notebook').hidden) search.focus();
 }
 
 export const ready = start();

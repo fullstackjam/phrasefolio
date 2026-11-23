@@ -29,21 +29,12 @@ function pinnedKeySet() {
 }
 
 export function readAccessConfig(env) {
-  const enabled = String(env.ACCESS_ENABLED ?? '').trim().toLowerCase() === 'true';
-  if (!enabled) return { enabled: false };
   const aud = String(env.ACCESS_AUD ?? '').trim().toLowerCase();
   const serviceClientId = String(env.ACCESS_SERVICE_CLIENT_ID ?? '').trim().toLowerCase();
-  if (!AUD_PATTERN.test(aud)) return { enabled: true, misconfigured: true };
-  return {
-    enabled: true,
-    aud,
-    serviceClientId: SERVICE_CLIENT_PATTERN.test(serviceClientId) ? serviceClientId : '',
-  };
-}
-
-function bearer(request) {
-  const token = request.headers.get('Authorization')?.match(/^Bearer ([^\s]+)$/i)?.[1] ?? '';
-  return token.length > 256 ? '' : token;
+  if (!AUD_PATTERN.test(aud) || !SERVICE_CLIENT_PATTERN.test(serviceClientId)) {
+    return { misconfigured: true };
+  }
+  return { aud, serviceClientId };
 }
 
 function fixedTimeEqual(expected, actual) {
@@ -58,12 +49,12 @@ function fixedTimeEqual(expected, actual) {
   return mismatch === 0;
 }
 
-async function sameSecret(secret, token) {
-  if (!secret || !token) return false;
+async function sameValue(expected, actual) {
+  if (!expected || !actual) return false;
   const encoder = new TextEncoder();
   const hash = (value) => crypto.subtle.digest('SHA-256', encoder.encode(value));
-  const [expected, actual] = await Promise.all([hash(secret), hash(token)]);
-  return fixedTimeEqual(expected, actual);
+  const [left, right] = await Promise.all([hash(expected), hash(actual)]);
+  return fixedTimeEqual(left, right);
 }
 
 function accessToken(request) {
@@ -107,10 +98,10 @@ function deny(status, error, extra = {}) {
 }
 
 function unauthenticated(request, url, aud) {
-  if (documentNavigation(request, url)) {
+  if (aud && documentNavigation(request, url)) {
     return { mode: 'redirect', location: accessLoginUrl(aud) };
   }
-  return deny(401, '需要通过 Cloudflare Access 登录', { login: accessLoginUrl(aud) });
+  return deny(401, '需要通过 Cloudflare Access 登录', aud ? { login: accessLoginUrl(aud) } : {});
 }
 
 function classify(payload) {
@@ -126,22 +117,9 @@ function classify(payload) {
   return null;
 }
 
-async function authorizeMachine(request, env, config, identity) {
-  if (!config.serviceClientId) return deny(503, '机器身份尚未配置');
-  if (!await sameSecret(config.serviceClientId, identity.clientId)) {
-    return deny(401, '机器身份凭证不完整');
-  }
-  if (!env.PHRASEFOLIO_API_TOKEN) return deny(503, '访问令牌尚未配置');
-  if (!await sameSecret(env.PHRASEFOLIO_API_TOKEN, bearer(request))) {
-    return deny(401, '机器身份凭证不完整');
-  }
-  return null;
-}
-
 export async function authorize(request, env) {
   const config = readAccessConfig(env);
   const url = new URL(request.url);
-  if (!config.enabled) return { mode: 'legacy' };
   if (config.misconfigured) return deny(503, '访问控制尚未正确配置');
   if (url.pathname === '/cdn-cgi/access/logout') {
     return { mode: 'redirect', location: accessLogoutUrl() };
@@ -162,9 +140,8 @@ export async function authorize(request, env) {
     if (protectedHeader.alg !== 'RS256') return unauthenticated(request, url, config.aud);
     const identity = classify(payload);
     if (!identity) return unauthenticated(request, url, config.aud);
-    if (identity.kind === 'service') {
-      const rejected = await authorizeMachine(request, env, config, identity);
-      if (rejected) return rejected;
+    if (identity.kind === 'service' && !await sameValue(config.serviceClientId, identity.clientId)) {
+      return deny(401, '机器身份凭证不完整');
     }
     return { mode: 'access', identity };
   } catch (error) {
@@ -172,12 +149,4 @@ export async function authorize(request, env) {
     console.error({ event: 'access_jwks_unavailable', code: error?.code ?? error?.name });
     return deny(503, '访问校验暂时不可用，请稍后重试');
   }
-}
-
-export async function legacyBearer(request, env) {
-  if (!env.PHRASEFOLIO_API_TOKEN) return deny(503, '访问令牌尚未配置');
-  if (!await sameSecret(env.PHRASEFOLIO_API_TOKEN, bearer(request))) {
-    return deny(401, '请输入有效的访问令牌', { challenge: true });
-  }
-  return null;
 }

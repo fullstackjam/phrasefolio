@@ -18,7 +18,7 @@
       </svg>
       <span>JAM’S NOTEBOOK</span>
     </a>
-    <button id="lock" class="quiet" type="button" hidden>锁定</button>
+    <button id="lock" class="quiet" type="button" hidden>退出</button>
   </header>
   <main class="layout">
     <section class="intro" aria-labelledby="page-title">
@@ -29,16 +29,9 @@
       </div>
       <span class="folio" aria-hidden="true">EN<span>.</span></span>
     </section>
-    <section class="login panel" id="login" hidden>
-      <h2>打开笔记本</h2>
-      <form id="login-form">
-        <label for="token">访问令牌</label>
-        <div class="login-row">
-          <input id="token" type="password" autocomplete="current-password" required>
-          <button class="primary" type="submit">打开</button>
-        </div>
-        <p id="login-error" class="error" role="alert" hidden></p>
-      </form>
+    <section class="status panel" id="status" hidden>
+      <h2>暂时打不开</h2>
+      <p id="status-error" class="error" role="alert" hidden></p>
     </section>
     <section id="notebook" aria-label="笔记条目" hidden>
       <div class="panel controls">
