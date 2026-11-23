@@ -52,11 +52,6 @@ jobs:
             version_output=$(mktemp "$RUNNER_TEMP/phrasefolio-version.XXXXXX")
             WRANGLER_OUTPUT_FILE_PATH="$version_output" npm run upload-version
             WORKER_VERSION_ID=$(jq -ser '[.[] | select(.type == "version-upload") | .version_id] | last // empty' "$version_output")
-            current_main=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
-            if [[ "$current_main" != "$GITHUB_SHA" ]]; then
-              echo "::notice::A newer commit is on main. Skipping this deployment."
-              exit 0
-            fi
           elif [[ -z "$WORKER_VERSION_ID" ]]; then
             npm run upload-version
             exit 0
@@ -66,4 +61,26 @@ jobs:
             echo "::error::Enter a valid Cloudflare Worker version ID."
             exit 1
           fi
-          ./node_modules/.bin/wrangler versions deploy "$WORKER_VERSION_ID@100" --yes
+          for delay in 0 5 10 20; do
+            sleep "$delay"
+            if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+              current_main=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+              if [[ "$current_main" != "$GITHUB_SHA" ]]; then
+                echo "::notice::A newer commit is on main. Skipping this deployment."
+                exit 0
+              fi
+            fi
+
+            if deploy_log=$(./node_modules/.bin/wrangler versions deploy "$WORKER_VERSION_ID@100" --yes 2>&1); then
+              printf '%s\n' "$deploy_log"
+              exit 0
+            else
+              deploy_status=$?
+            fi
+            printf '%s\n' "$deploy_log" >&2
+            # The version lookup can lag behind a successful upload.
+            if [[ "$GITHUB_EVENT_NAME" != push || "$deploy_log" != *'[code: 100146]'* ]]; then
+              exit "$deploy_status"
+            fi
+          done
+          exit "$deploy_status"
