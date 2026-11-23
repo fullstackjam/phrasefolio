@@ -93,7 +93,7 @@ function createEnv(overrides = {}) {
   };
 }
 
-async function sign(claims = {}, { key = privateKey, kid = 'test-key', alg = 'RS256' } = {}) {
+async function sign(claims = {}, { key = privateKey, kid = 'test-key', alg = 'RS256', typ = 'JWT' } = {}) {
   const now = Math.floor(Date.now() / 1000);
   const payload = {
     type: 'app',
@@ -110,7 +110,9 @@ async function sign(claims = {}, { key = privateKey, kid = 'test-key', alg = 'RS
     if (value === undefined) delete payload[name];
   }
   const signingKey = alg === 'HS256' ? new TextEncoder().encode('not-the-access-key') : key;
-  return new SignJWT(payload).setProtectedHeader({ alg, kid, typ: 'JWT' }).sign(signingKey);
+  const header = { alg, kid };
+  if (typ !== null) header.typ = typ;
+  return new SignJWT(payload).setProtectedHeader(header).sign(signingKey);
 }
 
 function unsigned(claims) {
@@ -193,8 +195,8 @@ describe('Access JWT validation', () => {
     expect(fetched).toContain(ACCESS_JWKS_URL);
   });
 
-  it('accepts the Access cookie when the assertion header is absent', async () => {
-    const token = await sign();
+  it.each(['JWT', null])('accepts the Access cookie with JOSE typ %s when the assertion header is absent', async (typ) => {
+    const token = await sign({}, { typ });
     const response = await send('/api/entries', {
       env,
       headers: { Cookie: `theme=light; CF_Authorization=${token}` },
@@ -228,6 +230,7 @@ describe('Access JWT validation', () => {
     ['tampered', async () => `${await sign()}x`],
     ['wrong issuer', () => sign({ iss: 'https://evil.example' })],
     ['wrong audience', () => sign({ aud: [OTHER_AUD] })],
+    ['wrong JOSE type', () => sign({}, { typ: 'application/other' })],
     ['missing expiry', () => sign({ exp: undefined })],
     ['expired', () => sign({ iat: Math.floor(Date.now() / 1000) - 120, nbf: Math.floor(Date.now() / 1000) - 120, exp: Math.floor(Date.now() / 1000) - 30 })],
     ['not yet valid', () => sign({ nbf: Math.floor(Date.now() / 1000) + 3600, exp: Math.floor(Date.now() / 1000) + 7200 })],
