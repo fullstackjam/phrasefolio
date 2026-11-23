@@ -34,6 +34,8 @@ npx wrangler d1 create phrasefolio
 
 `npm run deploy` 会先检查 `ACCESS_AUD` 和 `ACCESS_SERVICE_CLIENT_ID`。两者缺一就会直接退出，不会改远程 D1，也不会发布 Worker。配置齐全后，它应用远程 D1 迁移并发布 Worker。不要把旧访问令牌注入这个命令。
 
+在 GitHub Actions 的 **Phrasefolio Worker version** 中手动运行 `main`，可以测试并上传待发布版本。仓库 Actions Secret `CLOUDFLARE_API_TOKEN` 需要该 Cloudflare 账号的 Workers Scripts 写入权限。运行日志会显示 Worker Version ID。这个流程只上传版本，生产切流须在下列验收条件满足后单独执行。
+
 ## Cloudflare Access
 
 人和机器都只使用 Cloudflare Access JWT。代码里没有访问令牌表单，没有 `sessionStorage` 令牌，也没有 `ACCESS_ENABLED=false` 的旧认证路径。`Authorization: Bearer` 和 `CF-Access-Client-Id` 头本身都不能通过认证。
@@ -53,11 +55,11 @@ JWT 必须是团队 `https://fullstackjam.cloudflareaccess.com` 用 RS256 签的
 
 ### 切到生产之前
 
-当前线上仍是合并 #4 之前的旧 Worker，继续用旧 Bearer。这份代码还不能部署，因为 `vars` 仍是空的，部署脚本会拒绝。等专用服务令牌和 Access 应用都准备好后：
+GitHub Actions 会为上传的版本设置应用 AUD 和服务令牌 Client ID。切流前需确认专用服务令牌和生产 Access 应用都已就绪。
 
 1. 创建只包含 `phrasefolio.fullstackjam.com` 的 Self-hosted 应用。挂上上面的 Allow 策略。另建一条 Service Auth 策略，只包含这枚服务令牌。打开 Strict service token authentication。不要设置 `read_service_tokens_from_header`。不要使用 Protect all Workers。
 2. 应用会话也设为 `720h`。人的策略已经是 `720h`。若仍要减少一次性密码，再把团队全局会话调到 One month；那会影响团队上的其他 Access 应用。
-3. 收集机器改为只发送两个 Access 头，目标是 `https://phrasefolio.fullstackjam.com`。确认 Access 已放行之后，再把 AUD 和 Client ID 写入 `wrangler.jsonc` 并运行 `npm run deploy`。
+3. 收集机器改为只发送两个 Access 头，目标是 `https://phrasefolio.fullstackjam.com`。核对生产应用的 AUD 与 Actions 中的配置一致，并确认 Access 已放行收集机器，再将流量切到 Actions 上传的版本。
 4. 确认没有令牌表单，退出走到 `/cdn-cgi/access/logout`，`workers.dev` 为 401，服务身份可以收录，人的身份收录返回 403。然后由主流程删除 1Password 里的旧登录项，并可以删除不再使用的 Worker Secret。
 
 在第 3 步之前部署会让笔记和收录一起失败。回滚是继续保留当前线上的旧 Worker 版本，不是把某个开关拨回 Bearer。不要改 D1。
