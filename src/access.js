@@ -133,11 +133,15 @@ export async function authorize(request, env) {
       issuer: ACCESS_ISSUER,
       audience: config.aud,
       algorithms: ['RS256'],
-      typ: 'JWT',
       clockTolerance: 5,
       requiredClaims: ['iss', 'aud', 'exp', 'iat', 'type'],
     });
     if (protectedHeader.alg !== 'RS256') return unauthenticated(request, url, config.aud);
+    // Cloudflare Access may omit the JOSE typ header for email-code sessions.
+    const headerType = protectedHeader.typ;
+    if (headerType !== undefined && (typeof headerType !== 'string' || !/^(?:application\/)?jwt$/i.test(headerType))) {
+      return unauthenticated(request, url, config.aud);
+    }
     const identity = classify(payload);
     if (!identity) return unauthenticated(request, url, config.aud);
     if (identity.kind === 'service' && !await sameValue(config.serviceClientId, identity.clientId)) {
