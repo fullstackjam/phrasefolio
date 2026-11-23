@@ -12,8 +12,11 @@ const loginForm = $('login-form');
 const loginInput = $('token');
 const PAGE_SIZE = 24;
 const TOKEN_KEY = 'jam-notebook-access';
+const ACCESS_ISSUER = 'https://fullstackjam.cloudflareaccess.com';
 const markRequests = new Map();
-let token = sessionStorage.getItem(TOKEN_KEY) ?? '';
+let token = '';
+let accessMode = false;
+let logoutUrl = '';
 let loaded;
 let listRequest;
 let searchTimer;
@@ -21,22 +24,65 @@ let noticeTimer;
 let undoEntry;
 let limit = PAGE_SIZE;
 
+function allowedAccessUrl(value) {
+  let url;
+  try {
+    url = new URL(value, location.origin);
+  } catch {
+    return '';
+  }
+  if (url.username || url.password) return '';
+  const appLogout = url.origin === location.origin && url.pathname === '/cdn-cgi/access/logout';
+  const teamLogout = url.origin === ACCESS_ISSUER && url.pathname === '/cdn-cgi/access/logout';
+  const teamLogin = url.origin === ACCESS_ISSUER
+    && url.pathname === '/cdn-cgi/access/login/phrasefolio.fullstackjam.com';
+  return appLogout || teamLogout || teamLogin ? url.toString() : '';
+}
+
+function navigate(value) {
+  const target = allowedAccessUrl(value);
+  if (target) location.assign(target);
+}
+
 async function api(path, { data, signal } = {}) {
-  const headers = { Authorization: 'Bearer ' + token };
+  const headers = { Accept: 'application/json' };
+  if (!accessMode && token) headers.Authorization = 'Bearer ' + token;
   if (data !== undefined) headers['Content-Type'] = 'application/json';
   const response = await fetch('/api' + path, {
+    cache: 'no-store',
+    credentials: 'same-origin',
+    redirect: 'manual',
     headers,
     signal,
     method: data === undefined ? 'GET' : 'POST',
     body: data === undefined ? undefined : JSON.stringify(data),
   });
-  const result = await response.json();
+  if (response.type === 'opaqueredirect') {
+    const error = new Error('需要通过 Cloudflare Access 登录');
+    error.status = 401;
+    error.redirected = true;
+    throw error;
+  }
+  const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(result.error);
+    const error = new Error(typeof result.error === 'string' ? result.error : '笔记暂时不可用，请稍后重试');
     error.status = response.status;
+    error.login = result.login;
     throw error;
   }
   return result;
+}
+
+function showOutage(message) {
+  $('login').querySelector('h2').textContent = '暂时打不开';
+  loginForm.hidden = true;
+  listRequest?.abort();
+  $('notebook').hidden = true;
+  $('lock').hidden = true;
+  $('notice').hidden = true;
+  $('login').hidden = false;
+  $('login-error').textContent = message;
+  $('login-error').hidden = false;
 }
 
 function lock(message = '') {
@@ -48,15 +94,23 @@ function lock(message = '') {
   markRequests.clear();
   undoEntry = undefined;
   loaded = undefined;
-  source.options.length = 1;
+  while (source.options.length > 1) source.remove(1);
   list.replaceChildren();
   $('notebook').hidden = true;
   $('lock').hidden = true;
   $('notice').hidden = true;
+  $('login').querySelector('h2').textContent = '打开笔记本';
+  loginForm.hidden = false;
   $('login').hidden = false;
   $('login-error').textContent = message;
   $('login-error').hidden = !message;
   loginInput.focus();
+}
+
+function leaveForAccess(error) {
+  const target = allowedAccessUrl(error.login);
+  if (target) navigate(target);
+  else if (error.redirected || accessMode) location.assign(location.href);
 }
 
 function addLinks(element, text) {
@@ -123,7 +177,7 @@ function renderList() {
 }
 
 async function refresh() {
-  if (!token) return;
+  if (!accessMode && !token) return;
   listRequest?.abort();
   const controller = new AbortController();
   listRequest = controller;
@@ -137,7 +191,7 @@ async function refresh() {
     if (controller.signal.aborted) return;
     loaded = result;
     const selectedSource = source.value;
-    source.options.length = 1;
+    while (source.options.length > 1) source.remove(1);
     for (const { value, title } of result.sources) {
       source.add(new Option(title, value));
     }
@@ -146,12 +200,17 @@ async function refresh() {
     $('login').hidden = true;
     $('notebook').hidden = false;
     $('lock').hidden = false;
-    sessionStorage.setItem(TOKEN_KEY, token);
+    if (!accessMode) sessionStorage.setItem(TOKEN_KEY, token);
     renderList();
   } catch (error) {
     if (controller.signal.aborted) return;
-    if (error.status === 401 || $('notebook').hidden) {
-      lock(error.status === 401 || error.status === 503 ? error.message : '笔记暂时不可用，请稍后重试。');
+    if (error.status === 401) {
+      if (accessMode || error.redirected) leaveForAccess(error);
+      else lock(error.message);
+      return;
+    }
+    if ($('notebook').hidden) {
+      showOutage('笔记暂时不可用，请稍后重试。');
       return;
     }
     loaded = undefined;
@@ -188,8 +247,10 @@ async function changeKnown(entry, known) {
     notify(known ? '已标为认识' : '已撤销认识标记', known ? saved : undefined);
   } catch (error) {
     if (markRequests.get(entry.id) !== change) return;
-    if (error.status === 401) lock(error.message);
-    else notify('标记保存失败，请重试。');
+    if (error.status === 401) {
+      if (accessMode || error.redirected) leaveForAccess(error);
+      else lock(error.message);
+    } else notify('标记保存失败，请重试。');
   } finally {
     if (markRequests.get(entry.id) === change) {
       markRequests.delete(entry.id);
@@ -224,12 +285,20 @@ $('more').addEventListener('click', () => {
   const firstNew = list.children[previousLimit];
   firstNew?.querySelector('.speech').focus();
 });
-$('lock').addEventListener('click', () => lock());
+$('lock').addEventListener('click', () => {
+  if (!accessMode) {
+    lock();
+    return;
+  }
+  const target = allowedAccessUrl(logoutUrl) || new URL('/cdn-cgi/access/logout', location.origin).toString();
+  location.assign(target);
+});
 $('undo').addEventListener('click', () => {
   if (undoEntry) changeKnown(undoEntry, false);
 });
 loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (accessMode) return;
   token = loginInput.value.trim();
   loginInput.value = '';
   if (!token) return;
@@ -244,5 +313,52 @@ loginForm.addEventListener('submit', async (event) => {
   }
 });
 
-if (token) refresh();
-else lock();
+async function start() {
+  token = sessionStorage.getItem(TOKEN_KEY) ?? '';
+  let response;
+  try {
+    response = await fetch('/api/session', {
+      cache: 'no-store',
+      credentials: 'same-origin',
+      redirect: 'manual',
+      headers: { Accept: 'application/json' },
+    });
+  } catch {
+    showOutage('笔记暂时不可用，请稍后重试。');
+    return;
+  }
+  if (response.type === 'opaqueredirect') {
+    location.assign(location.href);
+    return;
+  }
+  const body = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    sessionStorage.removeItem(TOKEN_KEY);
+    token = '';
+    loginForm.hidden = true;
+    const target = allowedAccessUrl(body.login);
+    if (target) navigate(target);
+    else showOutage(typeof body.error === 'string' ? body.error : '需要通过 Cloudflare Access 登录');
+    return;
+  }
+  if (!response.ok) {
+    showOutage('笔记暂时不可用，请稍后重试。');
+    return;
+  }
+  if (body.access === true) {
+    accessMode = true;
+    logoutUrl = typeof body.logout === 'string' ? body.logout : '';
+    token = '';
+    sessionStorage.removeItem(TOKEN_KEY);
+    loginForm.hidden = true;
+    $('lock').textContent = '退出';
+    await refresh();
+    if (!$('notebook').hidden) search.focus();
+    return;
+  }
+  accessMode = false;
+  if (token) await refresh();
+  else lock();
+}
+
+export const ready = start();
