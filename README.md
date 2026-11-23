@@ -34,7 +34,9 @@ npx wrangler d1 create phrasefolio
 
 `npm run deploy` 会先检查 `ACCESS_AUD` 和 `ACCESS_SERVICE_CLIENT_ID`。两者缺一就会直接退出，不会改远程 D1，也不会发布 Worker。配置齐全后，它应用远程 D1 迁移并发布 Worker。不要把旧访问令牌注入这个命令。
 
-在 GitHub Actions 的 **Phrasefolio Worker version** 中手动运行 `main`，将 `version_id` 留空即可测试并上传待发布版本。仓库 Actions Secret `CLOUDFLARE_API_TOKEN` 需要该 Cloudflare 账号的 Workers Scripts 写入权限。运行日志会显示 Worker Version ID。下列验收条件满足后，再手动运行并填入该 ID，将生产流量切到该版本。
+推送或合并到 `main` 后，GitHub Actions 的 **Phrasefolio Worker version** 会运行测试和打包检查，通过后上传并将生产流量切到该版本。PR 只跑检查。这个流程使用仓库 Actions Secret `CLOUDFLARE_API_TOKEN`，需要该 Cloudflare 账号的 Workers Scripts 写入权限，无需运行远程 D1 迁移。
+
+需要回滚时，在同一个 workflow 手动运行 `main`，填入此前正常运行的 Access-only 版本 ID。手动运行时留空 `version_id` 可以只上传一个版本。版本 ID 可在运行日志中查看。
 
 ## Cloudflare Access
 
@@ -51,18 +53,11 @@ JWT 必须是团队 `https://fullstackjam.cloudflareaccess.com` 用 RS256 签的
 | `ACCESS_AUD` | 应用的 Application Audience，64 个十六进制字符 |
 | `ACCESS_SERVICE_CLIENT_ID` | 专用服务令牌的 Client ID，形如 `<32 个十六进制字符>.access` |
 
-人的 Allow 策略已经存在且尚未挂到应用：`a61aaba5-dfc9-4521-9b5c-05a31efed1fb`，决策 allow，包含一个邮箱，会话 `720h`。不要改成 Everyone，也不要动 Health 应用。
+生产站点使用 **Phrasefolio** Access 应用，覆盖 `phrasefolio.fullstackjam.com`。真人使用 `Phrasefolio owner allow` 策略，收集机器使用专用的 Service Auth 策略。
 
-### 切到生产之前
+### 发布后验收
 
-GitHub Actions 会为上传的版本设置应用 AUD 和服务令牌 Client ID。切流前需确认专用服务令牌和生产 Access 应用都已就绪。
-
-1. 创建只包含 `phrasefolio.fullstackjam.com` 的 Self-hosted 应用。挂上上面的 Allow 策略。另建一条 Service Auth 策略，只包含这枚服务令牌。打开 Strict service token authentication。不要设置 `read_service_tokens_from_header`。不要使用 Protect all Workers。
-2. 应用会话也设为 `720h`。人的策略已经是 `720h`。若仍要减少一次性密码，再把团队全局会话调到 One month；那会影响团队上的其他 Access 应用。
-3. 收集机器改为只发送两个 Access 头，目标是 `https://phrasefolio.fullstackjam.com`。核对生产应用的 AUD 与 Actions 中的配置一致，并确认 Access 已放行收集机器，再将流量切到 Actions 上传的版本。
-4. 确认没有令牌表单，退出走到 `/cdn-cgi/access/logout`，`workers.dev` 为 401，服务身份可以收录，人的身份收录返回 403。然后由主流程删除 1Password 里的旧登录项，并可以删除不再使用的 Worker Secret。
-
-在第 3 步之前部署会让笔记和收录一起失败。回滚是继续保留当前线上的旧 Worker 版本，不是把某个开关拨回 Bearer。不要改 D1。
+确认生产首页可以通过 Access 登录，退出走到 `/cdn-cgi/access/logout`，`workers.dev` 返回 401。收集机器向生产域名发送两个 Access 头，`GET /api/session` 应返回 `principal: "service"`。人的身份调用收录接口应返回 403。
 
 ## API
 
